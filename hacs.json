@@ -1,0 +1,6 @@
+{
+    "name": "[KR] 동행 복권",
+    "country": "KR",
+    "domains": ["sensor"],
+    "render_readme": true
+  }
