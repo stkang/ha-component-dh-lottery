@@ -92,13 +92,8 @@ async def _async_setup_service(hass: HomeAssistant, entry: DhLotteryConfigEntry)
                     else:
                         items.append(DhLotto645.Slot(sel_mode, [int(text) for text in texts[1:]]))
             result = await data.lotto_645_coord.lotto_645.async_buy(items)
-            message = (
-                f"제 {result.round_no}회\n"
-                f"발행일: {result.issue_dt}\n"
-                f"바코드: {result.barcode}\n"
-                f"번호:\n"
-                "\n".join([f"{game.slot} {game.mode} {' '.join(map(str, game.numbers))}" for game in result.games])
-            )
+            number_text = "\n".join([f"- {game.slot} {game.mode} {' '.join(map(str, game.numbers))}" for game in result.games])
+            message = f"제 {result.round_no}회\n발행일: {result.issue_dt}\n바코드: {result.barcode}\n번호:\n{number_text}"
             persistent_notification.async_create(hass, message, "로또 6/45 구매", call.context.id)
             return {
                 'result': 'success',
