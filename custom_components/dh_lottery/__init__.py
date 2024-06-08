@@ -9,11 +9,22 @@ import voluptuous as vol
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
-from homeassistant.core import HomeAssistant, ServiceResponse, ServiceCall, SupportsResponse
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceResponse,
+    ServiceCall,
+    SupportsResponse,
+)
 from homeassistant.exceptions import ConfigEntryNotReady
 from .client.dh_lottery_client import DhLotteryClient, DhLotteryError
 from .client.dh_lotto_645 import DhLotto645SelMode, DhLotto645
-from .const import DOMAIN, PLATFORMS, CONF_LOTTO_645, BUY_LOTTO_645_SERVICE_NAME, REFRESH_LOTTERY_SERVICE_NAME
+from .const import (
+    DOMAIN,
+    PLATFORMS,
+    CONF_LOTTO_645,
+    BUY_LOTTO_645_SERVICE_NAME,
+    REFRESH_LOTTERY_SERVICE_NAME,
+)
 from .coordinator import DhLotto645Coordinator, DhLotteryCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -24,17 +35,20 @@ type DhLotteryConfigEntry = ConfigEntry[DhLotteryData]  # noqa: F821
 @dataclass
 class DhLotteryData:
     """DH Lottery data class."""
+
     lottery_coord: DhLotteryCoordinator = None
     lotto_645_coord: Optional[DhLotto645Coordinator] = None
 
 
-BUY_LOTTO_645_SCHEMA = vol.Schema({
-    vol.Required("game_1"): str,
-    vol.Optional("game_2"): str,
-    vol.Optional("game_3"): str,
-    vol.Optional("game_4"): str,
-    vol.Optional("game_5"): str,
-})
+BUY_LOTTO_645_SCHEMA = vol.Schema(
+    {
+        vol.Required("game_1"): str,
+        vol.Optional("game_2"): str,
+        vol.Optional("game_3"): str,
+        vol.Optional("game_4"): str,
+        vol.Optional("game_5"): str,
+    }
+)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: DhLotteryConfigEntry) -> bool:
@@ -69,7 +83,9 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def _async_setup_service(hass: HomeAssistant, entry: DhLotteryConfigEntry) -> None:
+async def _async_setup_service(
+    hass: HomeAssistant, entry: DhLotteryConfigEntry
+) -> None:
     """서비스를 설정합니다."""
     data: DhLotteryData = entry.runtime_data
 
@@ -85,25 +101,36 @@ async def _async_setup_service(hass: HomeAssistant, entry: DhLotteryConfigEntry)
             items: List[DhLotto645.Slot] = []
             for i in range(1, 6):
                 if f"game_{i}" in call.data:
-                    texts = call.data[f"game_{i}"].strip().split(',')
+                    texts = call.data[f"game_{i}"].strip().split(",")
                     sel_mode = DhLotto645SelMode(texts[0])
                     if sel_mode == DhLotto645SelMode.AUTO:
                         items.append(DhLotto645.Slot(DhLotto645SelMode.AUTO))
                     else:
-                        items.append(DhLotto645.Slot(sel_mode, [int(text) for text in texts[1:]]))
+                        items.append(
+                            DhLotto645.Slot(sel_mode, [int(text) for text in texts[1:]])
+                        )
             result = await data.lotto_645_coord.lotto_645.async_buy(items)
-            number_text = "\n".join([f"- {game.slot} {game.mode} {' '.join(map(str, game.numbers))}" for game in result.games])
+            number_text = "\n".join(
+                [
+                    f"- {game.slot} {game.mode} {' '.join(map(str, game.numbers))}"
+                    for game in result.games
+                ]
+            )
             message = f"제 {result.round_no}회\n발행일: {result.issue_dt}\n바코드: {result.barcode}\n번호:\n{number_text}"
-            persistent_notification.async_create(hass, message, "로또 6/45 구매", call.context.id)
+            persistent_notification.async_create(
+                hass, message, "로또 6/45 구매", call.context.id
+            )
             return {
-                'result': 'success',
-                'value': result.to_dict(),
+                "result": "success",
+                "value": result.to_dict(),
             }
         except Exception as e:
-            persistent_notification.async_create(hass, str(e), "로또 6/45 구매 실패", call.context.id)
+            persistent_notification.async_create(
+                hass, str(e), "로또 6/45 구매 실패", call.context.id
+            )
             return {
-                'result': 'fail',
-                'message': str(e),
+                "result": "fail",
+                "message": str(e),
             }
         finally:
             await data.lottery_coord.async_clear_refresh()

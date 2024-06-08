@@ -7,10 +7,17 @@ import async_timeout
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from .client.dh_lottery_client import DhLotteryError, DhLotteryClient, \
-    DhLotteryBalanceData
+from .client.dh_lottery_client import (
+    DhLotteryError,
+    DhLotteryClient,
+    DhLotteryBalanceData,
+)
 from .client.dh_lotto_645 import DhLotto645
-from .const import COORDINATOR_UPDATE_INTERVAL, LOTTERY_UPDATE_INTERVAL, LOTTO_645_UPDATE_INTERVAL
+from .const import (
+    COORDINATOR_UPDATE_INTERVAL,
+    LOTTERY_UPDATE_INTERVAL,
+    LOTTO_645_UPDATE_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,6 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 @dataclass
 class DhLotto645BuyData:
     """로또 구매 내역을 나타내는 데이터 클래스입니다."""
+
     round_no: int
     barcode: str
     game: DhLotto645.Game
@@ -27,6 +35,7 @@ class DhLotto645BuyData:
 
 class DhCoordinator(DataUpdateCoordinator):
     """동행복권 데이터 업데이트 코디네이터입니다."""
+
     client: DhLotteryClient
 
 
@@ -52,9 +61,7 @@ class DhLotteryCoordinator(DhCoordinator):
                     balance = await self.client.async_get_balance()
                     self._balance_last_updated = datetime.datetime.now()
 
-            return {
-                "balance": balance
-            }
+            return {"balance": balance}
         # except DhLotteryLoginError as err:
         # Raising ConfigEntryAuthFailed will cancel future updates
         # and start a config flow with SOURCE_REAUTH (async_step_reauth)
@@ -71,7 +78,9 @@ class DhLotteryCoordinator(DhCoordinator):
         """예치금 정보를 업데이트할지 확인합니다."""
         if not self._balance_last_updated:
             return True
-        return (datetime.datetime.now() - self._balance_last_updated) >= LOTTERY_UPDATE_INTERVAL
+        return (
+            datetime.datetime.now() - self._balance_last_updated
+        ) >= LOTTERY_UPDATE_INTERVAL
 
 
 class DhLotto645Coordinator(DhCoordinator):
@@ -98,13 +107,18 @@ class DhLotto645Coordinator(DhCoordinator):
             if await self._async_check_update_winning_numbers():
                 async with async_timeout.timeout(10):
                     latest_round_no = await self.lotto_645.async_get_latest_round_no()
-                    latest_winning_numbers = await self._async_get_winning_numbers(latest_round_no)
+                    latest_winning_numbers = await self._async_get_winning_numbers(
+                        latest_round_no
+                    )
                     self._latest_winning_numbers = latest_winning_numbers
+                    self._buy_history_last_updated = None
 
             buy_history_this_week: List[DhLotto645BuyData] = []
             if self._async_check_update_buy_history():
                 async with async_timeout.timeout(10):
-                    buy_history_this_week = await self._async_get_buy_history_this_week()
+                    buy_history_this_week = (
+                        await self._async_get_buy_history_this_week()
+                    )
                     self._buy_history_last_updated = datetime.datetime.now()
             return {
                 "latest_winning_numbers": latest_winning_numbers,
@@ -130,7 +144,9 @@ class DhLotto645Coordinator(DhCoordinator):
             return True
         now = datetime.datetime.now()
         # 현재 시각이 토요일 20:40 ~ 21:30 사이인지 확인합니다.
-        if now.weekday() == 5 and datetime.time(20, 40) <= now.time() <= datetime.time(21, 30):
+        if now.weekday() == 5 and datetime.time(20, 40) <= now.time() <= datetime.time(
+            21, 30
+        ):
             if now.strftime("%Y-%m-%d") != self._latest_winning_numbers.draw_date:
                 return True
         return False
@@ -139,12 +155,16 @@ class DhLotto645Coordinator(DhCoordinator):
         """구매 내역을 업데이트할지 확인합니다."""
         if not self._buy_history_last_updated:
             return True
-        return (datetime.datetime.now() - self._buy_history_last_updated) >= LOTTO_645_UPDATE_INTERVAL
+        return (
+            datetime.datetime.now() - self._buy_history_last_updated
+        ) >= LOTTO_645_UPDATE_INTERVAL
 
     async def _async_get_buy_history_this_week(self) -> List[DhLotto645BuyData]:
         """이번 주의 구매 내역을 가져옵니다."""
 
-        def calculate_rank(my_numbers: List[int], win_numbers: List[int], bonus: int) -> int:
+        def calculate_rank(
+            my_numbers: List[int], win_numbers: List[int], bonus: int
+        ) -> int:
             """로또 등수를 계산합니다."""
             same_cnt = 0  # 일치하는 개수
 
@@ -169,21 +189,25 @@ class DhLotto645Coordinator(DhCoordinator):
             """등수를 비동기로 가져옵니다."""
             if _result == "미추첨":
                 return -1
-            if '당첨' in _result:
+            if "당첨" in _result:
                 winning_numbers = await self._async_get_winning_numbers(item.round_no)
-                return calculate_rank(_numbers, winning_numbers.numbers, winning_numbers.bonus_num)
+                return calculate_rank(
+                    _numbers, winning_numbers.numbers, winning_numbers.bonus_num
+                )
             return 0
 
         items: List[DhLotto645BuyData] = []
         for item in await self.lotto_645.async_get_buy_history_this_week():
             for game in item.games:
-                items.append(DhLotto645BuyData(
-                    round_no=item.round_no,
-                    barcode=item.barcode,
-                    game=game,
-                    rank=await async_get_rank(item.result, game.numbers),
-                    result=item.result,
-                ))
+                items.append(
+                    DhLotto645BuyData(
+                        round_no=item.round_no,
+                        barcode=item.barcode,
+                        game=game,
+                        rank=await async_get_rank(item.result, game.numbers),
+                        result=item.result,
+                    )
+                )
                 if len(items) >= 5:
                     break
         return items

@@ -195,7 +195,10 @@ class DhLotto645:
                 if len(_items) > 5:
                     raise DhLotto645Error("❗구매할 게임이 5개를 초과했습니다.")
                 for _idx, _item in enumerate(_items):
-                    if _item.mode == DhLotto645SelMode.MANUAL and len(_item.numbers) > 6:
+                    if (
+                        _item.mode == DhLotto645SelMode.MANUAL
+                        and len(_item.numbers) > 6
+                    ):
                         raise DhLotto645Error(
                             f"❗{_idx + 1}번째 게임의 수동 선택 번호가 6개를 초과했습니다."
                         )
@@ -204,7 +207,11 @@ class DhLotto645:
                 """주간 구매 제한을 확인합니다."""
                 _history_items = await self.async_get_buy_history_this_week()
                 __this_week_buy_count = sum(
-                    [len(_item.games) for _item in _history_items if _item.result == "미추첨"]
+                    [
+                        len(_item.games)
+                        for _item in _history_items
+                        if _item.result == "미추첨"
+                    ]
                 )
                 if __this_week_buy_count >= 5:
                     raise DhLotto645Error("❗구매 가능한 게임 5회를 초과했습니다.")
@@ -213,7 +220,9 @@ class DhLotto645:
             async def _async_check_balance() -> None:
                 """예치금이 충분한지 확인합니다."""
                 if _buy_count * 1000 > _balance.purchase_available:
-                    raise DhLotto645Error(f"❗예치금이 부족합니다. (예치금: {_balance.purchase_available}원)")
+                    raise DhLotto645Error(
+                        f"❗예치금이 부족합니다. (예치금: {_balance.purchase_available}원)"
+                    )
                 _LOGGER.debug(
                     f"Buy count: {_buy_count}, deposit: {_buy_count * 1000}/{_balance.purchase_available}원"
                 )
@@ -244,7 +253,7 @@ class DhLotto645:
                         "genType": (
                             DhLotto645SelMode.SEMI_AUTO
                             if t.mode == DhLotto645SelMode.MANUAL
-                               and len(t.numbers) != 6
+                            and len(t.numbers) != 6
                             else t.mode
                         ).to_value(),
                         "arrGameChoiceNum": (
@@ -266,7 +275,7 @@ class DhLotto645:
                 round_no=int(result["buyRound"]),
                 issue_dt=f'{result["issueDay"]} {result["weekDay"]} {result["issueTime"]}',
                 barcode=f'{result["barCode1"]} {result["barCode2"]} {result["barCode3"]} '
-                        f'{result["barCode4"]} {result["barCode5"]} {result["barCode6"]}',
+                f'{result["barCode4"]} {result["barCode5"]} {result["barCode6"]}',
                 games=[
                     DhLotto645.Game(
                         slot=_item[0],
@@ -301,13 +310,17 @@ class DhLotto645:
         except DhLotteryError:
             raise
         except Exception as ex:
-            raise DhLotto645Error(f"❗로또6/45 구매에 실패했습니다. (사유: {str(ex)})") from ex
+            raise DhLotto645Error(
+                f"❗로또6/45 구매에 실패했습니다. (사유: {str(ex)})"
+            ) from ex
 
     async def async_get_buy_history_this_week(self) -> list[BuyHistoryData]:
         """최근 1주일간의 구매 내역을 조회합니다."""
         pattern = r"detailPop\('(\d+)', '(\d+)'"
 
-        async def async_get_receipt(_order_no: str, _barcode: str) -> List[DhLotto645.Game]:
+        async def async_get_receipt(
+            _order_no: str, _barcode: str
+        ) -> List[DhLotto645.Game]:
             """영수증을 가져옵니다."""
             _resp = await self.client.session.get(
                 f"{DH_LOTTERY_URL}/myPage.do?method=lotto645Detail&orderNo={_order_no}&barcode={_barcode}&issueNo=1"
@@ -351,4 +364,6 @@ class DhLotto645:
                     break
             return items
         except Exception as ex:
-            raise DhLotteryError("❗최근 1주일간의 구매내역을 조회하지 못했습니다.") from ex
+            raise DhLotteryError(
+                "❗최근 1주일간의 구매내역을 조회하지 못했습니다."
+            ) from ex

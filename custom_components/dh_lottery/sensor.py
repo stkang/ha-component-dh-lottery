@@ -1,21 +1,36 @@
 import logging
 from typing import List, Optional
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass
+from homeassistant.components.sensor import (
+    SensorEntity,
+    SensorStateClass,
+    SensorDeviceClass,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import DhLotteryConfigEntry, DhLotteryData
-from .const import CONF_LOTTO_645, BRAND_NAME, \
-    get_dh_lotto_645_device_info, get_dh_lottery_device_info
-from .coordinator import DhLotto645Coordinator, DhLotteryCoordinator, DhCoordinator, DhLotto645BuyData
+from .const import (
+    CONF_LOTTO_645,
+    BRAND_NAME,
+    get_dh_lotto_645_device_info,
+    get_dh_lottery_device_info,
+)
+from .coordinator import (
+    DhLotto645Coordinator,
+    DhLotteryCoordinator,
+    DhCoordinator,
+    DhLotto645BuyData,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
-        hass: HomeAssistant, entry: DhLotteryConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: DhLotteryConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """설정 항목을 사용하여 센서 엔티티를 추가합니다."""
     data: DhLotteryData = entry.runtime_data
@@ -38,7 +53,9 @@ class DhSensor(CoordinatorEntity):
 
     def __init__(self, coordinator: DhCoordinator, sensor_id: str):
         super().__init__(coordinator)
-        self.entity_id = f"sensor.{BRAND_NAME}_{coordinator.client.username}_{sensor_id}"
+        self.entity_id = (
+            f"sensor.{BRAND_NAME}_{coordinator.client.username}_{sensor_id}"
+        )
         self._attr_unique_id = f"{BRAND_NAME}-{coordinator.client.username}_{sensor_id}"
 
     @property
@@ -60,23 +77,25 @@ class DhLotto645HistorySensor(DhSensor, Entity):
     """
 
     def __init__(self, coordinator: DhLotto645Coordinator, no: int):
-        super().__init__(coordinator, f'lotto_645_history_{no}')
+        super().__init__(coordinator, f"lotto_645_history_{no}")
         self._no = no
         self._attr_name = f"게임 {no}"
         self._attr_icon = "mdi:question-box-outline"
-        self._attr_device_info = get_dh_lotto_645_device_info(coordinator.client.username)
+        self._attr_device_info = get_dh_lotto_645_device_info(
+            coordinator.client.username
+        )
         self.result: Optional[DhLotto645BuyData] = None
 
     @property
     def icon(self):
         """프론트엔드에서 사용할 아이콘입니다."""
         if not self.result:
-            return 'mdi:close-box-outline'
+            return "mdi:close-box-outline"
         if self.result.rank == -1:
-            return 'mdi:help-box-outline'
+            return "mdi:help-box-outline"
         if self.result.rank in [1, 2, 3, 4, 5]:
-            return f'mdi:numeric-{self.result.rank}-box'
-        return 'mdi:close-box'
+            return f"mdi:numeric-{self.result.rank}-box"
+        return "mdi:close-box"
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -90,10 +109,16 @@ class DhLotto645HistorySensor(DhSensor, Entity):
             return
         self.result = buy_history_this_week[self._no - 1]
         state = " ".join(map(str, self.result.game.numbers))
-        if self._attr_state == state:
+        if (
+            self._attr_state == state
+            and self._attr_extra_state_attributes
+            and self._attr_extra_state_attributes["순위"] == self.result.rank
+        ):
             return
 
-        self._attr_name = f"{self.result.round_no}회 {self.result.game.slot}({self.result.game.mode})"
+        self._attr_name = (
+            f"{self.result.round_no}회 {self.result.game.slot}({self.result.game.mode})"
+        )
         self._attr_state = " ".join(map(str, self.result.game.numbers))
         self._attr_extra_state_attributes = {
             "추첨 회차": self.result.round_no,
@@ -111,12 +136,15 @@ class DhLotto645WinningSensor(DhSensor, Entity):
 
     이 클래스는 동행복권의 최근 당첨번호를 표시하는 센서를 나타냅니다.
     """
+
     _attr_icon = "mdi:star-circle-outline"
 
     def __init__(self, coordinator: DhLotto645Coordinator):
-        super().__init__(coordinator, 'lotto_645_win_nums')
+        super().__init__(coordinator, "lotto_645_win_nums")
         self._attr_name = "최근 당첨번호"
-        self._attr_device_info = get_dh_lotto_645_device_info(coordinator.client.username)
+        self._attr_device_info = get_dh_lotto_645_device_info(
+            coordinator.client.username
+        )
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -155,7 +183,7 @@ class DhDepositSensor(DhSensor, SensorEntity):
     _attr_state_class = SensorStateClass.TOTAL
 
     def __init__(self, coordinator: DhLotteryCoordinator):
-        super().__init__(coordinator, 'deposit')
+        super().__init__(coordinator, "deposit")
         self._attr_device_info = get_dh_lottery_device_info(coordinator.client.username)
 
     @callback
