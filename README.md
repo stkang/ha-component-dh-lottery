@@ -2,7 +2,7 @@
 
 ![HACS][hacs-shield]
 
-<img src="./images/showcase.png" title="Showcase" alt="Showcase" />
+<img src="https://github.com/stkang/ha-component-dh-lottery/blob/master/images/showcase.png?raw=true" title="Showcase" alt="Showcase" />
 
 문의 : 네이버 [HomeAssistant카페](https://cafe.naver.com/koreassistant)
 
@@ -42,8 +42,8 @@
 - 아이디 비밀번호 입력
 - 로또 6/45 체크 (추후 다른 게임도 추가 예정)
 
-<img src="./images/config_flow.png" title="ConfigFlow" alt="ConfigFlow" />
-<img src="./images/service.png" title="Service" alt="Service" />
+<img src="https://github.com/stkang/ha-component-dh-lottery/blob/master/images/config_flow.png?raw=true" title="ConfigFlow" alt="ConfigFlow" />
+<img src="https://github.com/stkang/ha-component-dh-lottery/blob/master/images/service.png?raw=true" title="Service" alt="Service" />
 
 ```yaml
 # 예치금 및 복권 구매내역 수동 갠신
