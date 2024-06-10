@@ -58,6 +58,7 @@ class DhLotteryCoordinator(DhCoordinator):
             balance: Optional[DhLotteryBalanceData] = None
             if self._async_check_update_balance():
                 async with async_timeout.timeout(10):
+                    _LOGGER.info("예치금 정보를 업데이트합니다.")
                     balance = await self.client.async_get_balance()
                     self._balance_last_updated = datetime.datetime.now()
 
@@ -106,6 +107,7 @@ class DhLotto645Coordinator(DhCoordinator):
             latest_winning_numbers: Optional[DhLotto645.WinningData] = None
             if await self._async_check_update_winning_numbers():
                 async with async_timeout.timeout(10):
+                    _LOGGER.info("당첨 번호를 업데이트합니다.")
                     latest_round_no = await self.lotto_645.async_get_latest_round_no()
                     latest_winning_numbers = await self._async_get_winning_numbers(
                         latest_round_no
@@ -116,6 +118,7 @@ class DhLotto645Coordinator(DhCoordinator):
             buy_history_this_week: List[DhLotto645BuyData] = []
             if self._async_check_update_buy_history():
                 async with async_timeout.timeout(10):
+                    _LOGGER.info("이번 주의 구매 내역을 업데이트합니다.")
                     buy_history_this_week = (
                         await self._async_get_buy_history_this_week()
                     )
@@ -183,7 +186,7 @@ class DhLotto645Coordinator(DhCoordinator):
             if same_cnt == 3:
                 return 5
             else:
-                return 6  # 꽝
+                return 0  # 꽝
 
         async def async_get_rank(_result: str, _numbers: List[int]) -> int:
             """등수를 비동기로 가져옵니다."""

@@ -6,6 +6,7 @@ from typing import Optional, List
 
 import voluptuous as vol
 
+import homeassistant.helpers.config_validation as cv
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
@@ -16,6 +17,7 @@ from homeassistant.core import (
     SupportsResponse,
 )
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import entity_registry as er
 from .client.dh_lottery_client import DhLotteryClient, DhLotteryError
 from .client.dh_lotto_645 import DhLotto645SelMode, DhLotto645
 from .const import (
@@ -42,17 +44,19 @@ class DhLotteryData:
 
 BUY_LOTTO_645_SCHEMA = vol.Schema(
     {
-        vol.Required("game_1"): str,
-        vol.Optional("game_2"): str,
-        vol.Optional("game_3"): str,
-        vol.Optional("game_4"): str,
-        vol.Optional("game_5"): str,
+        vol.Required("entity_id"): cv.entity_id,
+        vol.Required("game_1"): cv.string,
+        vol.Optional("game_2"): cv.string,
+        vol.Optional("game_3"): cv.string,
+        vol.Optional("game_4"): cv.string,
+        vol.Optional("game_5"): cv.string,
     }
 )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: DhLotteryConfigEntry) -> bool:
     """설정 항목을 설정합니다."""
+    hass.data.setdefault(DOMAIN, {})
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
     client = DhLotteryClient(username, password)
@@ -65,6 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DhLotteryConfigEntry) ->
     if entry.data[CONF_LOTTO_645]:
         data.lotto_645_coord = DhLotto645Coordinator(hass, client)
     entry.runtime_data = data
+    hass.data[DOMAIN][entry.entry_id] = data
 
     await _async_setup_service(hass, entry)
 
@@ -87,17 +92,28 @@ async def _async_setup_service(
     hass: HomeAssistant, entry: DhLotteryConfigEntry
 ) -> None:
     """서비스를 설정합니다."""
-    data: DhLotteryData = entry.runtime_data
 
-    async def _async_lottery_refresh(call: ServiceCall) -> ServiceResponse:
+    async def _async_lottery_refresh(call: ServiceCall) -> None:
         """로또 정보를 새로고침합니다."""
-        await data.lottery_coord.async_clear_refresh()
-        if entry.data[CONF_LOTTO_645]:
-            await data.lotto_645_coord.async_clear_refresh()
+        for lottery_data in hass.data[DOMAIN].values():
+            await lottery_data.lottery_coord.async_clear_refresh()
+            if lottery_data.lotto_645_coord:
+                await lottery_data.lotto_645_coord.async_clear_refresh()
+
+    def _find_lottery_data(deposit_id: str) -> DhLotteryData:
+        registry = er.async_get(hass)
+        registry_entry = registry.async_get(deposit_id)
+        if not registry_entry:
+            raise ValueError(f"예치금 엔티티 '{deposit_id}'를 찾을 수 없습니다.")
+        if registry_entry.config_entry_id not in hass.data[DOMAIN]:
+            raise ValueError(f"예치금 엔티티 '{deposit_id}'를 찾을 수 없습니다.")
+        return hass.data[DOMAIN][registry_entry.config_entry_id]
 
     async def _async_buy_lotto_645(call: ServiceCall) -> ServiceResponse:
         """로또 6/45를 구매합니다."""
+        lottery_data: DhLotteryData | None = None
         try:
+            lottery_data = _find_lottery_data(call.data["entity_id"])
             items: List[DhLotto645.Slot] = []
             for i in range(1, 6):
                 if f"game_{i}" in call.data:
@@ -109,7 +125,7 @@ async def _async_setup_service(
                         items.append(
                             DhLotto645.Slot(sel_mode, [int(text) for text in texts[1:]])
                         )
-            result = await data.lotto_645_coord.lotto_645.async_buy(items)
+            result = await lottery_data.lotto_645_coord.lotto_645.async_buy(items)
             number_text = "\n".join(
                 [
                     f"- {game.slot} {game.mode} {' '.join(map(str, game.numbers))}"
@@ -133,8 +149,9 @@ async def _async_setup_service(
                 "message": str(e),
             }
         finally:
-            await data.lottery_coord.async_clear_refresh()
-            await data.lotto_645_coord.async_clear_refresh()
+            if lottery_data:
+                await lottery_data.lottery_coord.async_clear_refresh()
+                await lottery_data.lotto_645_coord.async_clear_refresh()
 
     hass.services.async_register(
         DOMAIN,

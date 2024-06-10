@@ -28,6 +28,10 @@
       "name": "로또 6/45 구매",
       "description": "로또 6/45를 구매 합니다. 자동, 수동, 반자동",
       "fields": {
+        "entity_id": {
+          "name": "예치금 선택",
+          "description": "구매할 계정의 예치금 엔티티를 선택해주세요."
+        },
         "game_1": {
           "name": "게임 1 (game_1)",
           "description": "예) 자동"

@@ -1,5 +1,12 @@
 buy_lotto_645:
   fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          filter:
+            integration: dh_lottery
+          domain: sensor
     game_1:
       required: true
       selector:
