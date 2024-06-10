@@ -111,7 +111,7 @@ class DhLotto645HistorySensor(DhSensor, Entity):
         if self.result == result:
             return
         self.result = result
-        self._attr_state == " ".join(map(str, self.result.game.numbers))
+        self._attr_state = " ".join(map(str, self.result.game.numbers))
         self._attr_name = (
             f"{self.result.round_no}회 {self.result.game.slot}({self.result.game.mode})"
         )
