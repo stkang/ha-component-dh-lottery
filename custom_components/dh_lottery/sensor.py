@@ -107,15 +107,11 @@ class DhLotto645HistorySensor(DhSensor, Entity):
         buy_history_this_week = self.coordinator.data["buy_history_this_week"]
         if len(buy_history_this_week) < self._no:
             return
-        self.result = buy_history_this_week[self._no - 1]
-        state = " ".join(map(str, self.result.game.numbers))
-        if (
-            self._attr_state == state
-            and self._attr_extra_state_attributes
-            and self._attr_extra_state_attributes["순위"] == self.result.rank
-        ):
+        result = buy_history_this_week[self._no - 1]
+        if self.result == result:
             return
-
+        self.result = result
+        self._attr_state == " ".join(map(str, self.result.game.numbers))
         self._attr_name = (
             f"{self.result.round_no}회 {self.result.game.slot}({self.result.game.mode})"
         )

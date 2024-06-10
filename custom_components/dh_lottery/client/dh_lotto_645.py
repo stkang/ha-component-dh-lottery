@@ -86,7 +86,7 @@ class DhLotto645:
         mode: DhLotto645SelMode = DhLotto645SelMode.AUTO
         numbers: List[int] = field(default_factory=lambda: [])
 
-    @dataclass
+    @dataclass(order=True)
     class Game:
         """로또 게임 정보를 나타내는 데이터 클래스입니다."""
 

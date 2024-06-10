@@ -22,7 +22,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(order=True)
 class DhLotto645BuyData:
     """로또 구매 내역을 나타내는 데이터 클래스입니다."""
 
