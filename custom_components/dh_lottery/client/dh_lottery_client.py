@@ -101,7 +101,12 @@ class DhLotteryClient:
                 },
             )
             soup = BeautifulSoup(await resp.text(), "html5lib")
-            if soup.find("a", attrs={"class": "btn_common"}):
+            if "점검" in soup.title.text:
+                self.logged_in = False
+                raise DhLotteryLoginError(
+                    "시스템 점검중 입니다. 잠시 후 다시 시도해주세요."
+                )
+            elif soup.find("a", attrs={"class": "btn_common"}):
                 self.logged_in = False
                 raise DhLotteryLoginError(
                     "로그인에 실패했습니다. 아이디 또는 비밀번호를 확인해주세요. (5회 실패했을 수도 있습니다. 이 경우엔 홈페이지에서 비밀번호를 변경해야 합니다)"
