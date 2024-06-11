@@ -80,6 +80,7 @@ class DHLotto645Buy1Button(DhButton):
             DOMAIN,
             BUY_LOTTO_645_SERVICE_NAME,
             {
+                "entity_id": self.entity_id,
                 "game_1": "자동",
             },
             blocking=True,
