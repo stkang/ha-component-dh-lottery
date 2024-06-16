@@ -42,6 +42,8 @@ async def async_setup_entry(
     if entry.data[CONF_LOTTO_645]:
         await data.lotto_645_coord.async_config_entry_first_refresh()
 
+        entities.append(DhLotto645AccumulatedPrizeSensor(data.lotto_645_coord))
+
         entities.append(DhLotto645WinningSensor(data.lotto_645_coord))
         for i in range(1, 6):
             entities.append(DhLotto645HistorySensor(data.lotto_645_coord, i))
@@ -201,4 +203,41 @@ class DhDepositSensor(DhSensor, SensorEntity):
             "구매 불가 금액": balance.purchase_impossible,
             "이번달 누적 구매 금액": balance.this_month_accumulated_purchase,
         }
+        self.async_write_ha_state()
+
+
+class DhLotto645AccumulatedPrizeSensor(DhSensor, SensorEntity):
+    """
+    동행복권 누적 당첨금 센서 클래스입니다.
+    이 클래스는 동행복권의 누적 당첨금을 표시하는 센서를 나타냅니다.
+    """
+
+    _attr_name = "당첨금"
+    _attr_icon = "mdi:cash"
+    _attr_native_unit_of_measurement = "원"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+
+    def __init__(self, coordinator: DhLotto645Coordinator):
+        _LOGGER.debug("DhLotto645AccumulatedPrizeSensor")
+        super().__init__(coordinator, "accumulated_prize")
+        self._attr_name = "누적 당첨금액"
+        self._attr_device_info = get_dh_lotto_645_device_info(
+            coordinator.client.username
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """
+        코디네이터로부터 업데이트된 데이터를 처리하는 메소드입니다.
+
+        누적 당첨금 업데이트합니다.
+        """
+
+        if (result := self.coordinator.data["accumulated_prize"]) is None:
+            return
+
+        if self._attr_native_value == result.accumulated_prize:
+            return
+        self._attr_native_value = result.accumulated_prize
         self.async_write_ha_state()

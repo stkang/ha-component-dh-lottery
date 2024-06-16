@@ -88,7 +88,6 @@ class DhLotto645Coordinator(DhCoordinator):
     """로또 6/45 데이터 업데이트 코디네이터입니다."""
 
     def __init__(self, hass: HomeAssistant, client: DhLotteryClient):
-
         super().__init__(
             hass,
             _LOGGER,
@@ -100,11 +99,14 @@ class DhLotto645Coordinator(DhCoordinator):
         self._latest_winning_numbers: Optional[DhLotto645.WinningData] = None
         self._buy_history_last_updated: Optional[datetime.datetime] = None
         self.winning_dict: dict[int, DhLotto645.WinningData] = {}
+        self._accumulated_prize: Optional[DhLotto645.accumulatedPrizeData] = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Lotto 6/45 데이터를 비동기로 업데이트합니다."""
         try:
             latest_winning_numbers: Optional[DhLotto645.WinningData] = None
+            accumulated_prize: Optional[DhLotto645.accumulatedPrizeData] = None
+
             if await self._async_check_update_winning_numbers():
                 async with async_timeout.timeout(10):
                     _LOGGER.info("당첨 번호를 업데이트합니다.")
@@ -123,9 +125,18 @@ class DhLotto645Coordinator(DhCoordinator):
                         await self._async_get_buy_history_this_week()
                     )
                     self._buy_history_last_updated = datetime.datetime.now()
+
+            async with async_timeout.timeout(10):
+                _LOGGER.info("누적당첨금을 업ㄷ에이트 합니다.")
+                accumulated_prize = await self.client.async_get_accumulated_prize()
+                self._accumulated_prize = DhLotto645.accumulatedPrizeData(
+                    accumulated_prize=accumulated_prize
+                )
+
             return {
                 "latest_winning_numbers": latest_winning_numbers,
                 "buy_history_this_week": buy_history_this_week,
+                "accumulated_prize": self._accumulated_prize,
             }
         # except DhLotteryLoginError as err:
         # Raising ConfigEntryAuthFailed will cancel future updates
