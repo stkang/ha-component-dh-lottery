@@ -20,8 +20,9 @@ CONF_LOTTO_645 = "lotto_645"
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
-COORDINATOR_UPDATE_INTERVAL = timedelta(minutes=1)
-LOTTERY_UPDATE_INTERVAL = timedelta(minutes=60)
+COORDINATOR_UPDATE_INTERVAL = timedelta(minutes=3)
+LOTTERY_BALANCE_UPDATE_INTERVAL = timedelta(minutes=60)
+LOTTERY_ACCUMULATED_PRIZE_UPDATE_INTERVAL = timedelta(minutes=60)
 LOTTO_645_UPDATE_INTERVAL = timedelta(minutes=60)
 
 

@@ -1,7 +1,7 @@
 import datetime
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional, List
+from typing import Any, Optional, List, Callable, Awaitable
 
 import async_timeout
 
@@ -15,8 +15,9 @@ from .client.dh_lottery_client import (
 from .client.dh_lotto_645 import DhLotto645
 from .const import (
     COORDINATOR_UPDATE_INTERVAL,
-    LOTTERY_UPDATE_INTERVAL,
     LOTTO_645_UPDATE_INTERVAL,
+    LOTTERY_ACCUMULATED_PRIZE_UPDATE_INTERVAL,
+    LOTTERY_BALANCE_UPDATE_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,18 +52,29 @@ class DhLotteryCoordinator(DhCoordinator):
         )
         self.client = client
         self._balance_last_updated: Optional[datetime.datetime] = None
+        self._accumulated_prize_last_updated: Optional[datetime.datetime] = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """동행복권 데이터를 비동기로 업데이트합니다."""
         try:
             balance: Optional[DhLotteryBalanceData] = None
-            if self._async_check_update_balance():
+            if self._check_update_balance():
                 async with async_timeout.timeout(10):
                     _LOGGER.info("예치금 정보를 업데이트합니다.")
                     balance = await self.client.async_get_balance()
                     self._balance_last_updated = datetime.datetime.now()
 
-            return {"balance": balance}
+            accumulated_prize: Optional[int] = None
+            if self._check_update_accumulated_prize():
+                async with async_timeout.timeout(10):
+                    _LOGGER.info("누적 당첨금을 업데이트 합니다.")
+                    accumulated_prize = await self.client.async_get_accumulated_prize()
+                    self._accumulated_prize_last_updated = datetime.datetime.now()
+
+            return {
+                "balance": balance,
+                "accumulated_prize": accumulated_prize,
+            }
         # except DhLotteryLoginError as err:
         # Raising ConfigEntryAuthFailed will cancel future updates
         # and start a config flow with SOURCE_REAUTH (async_step_reauth)
@@ -73,21 +85,35 @@ class DhLotteryCoordinator(DhCoordinator):
     async def async_clear_refresh(self):
         """데이터를 새로고침합니다."""
         self._balance_last_updated = None
+        self._accumulated_prize_last_updated = None
         await self.async_request_refresh()
 
-    def _async_check_update_balance(self) -> bool:
+    def _check_update_balance(self) -> bool:
         """예치금 정보를 업데이트할지 확인합니다."""
         if not self._balance_last_updated:
             return True
         return (
             datetime.datetime.now() - self._balance_last_updated
-        ) >= LOTTERY_UPDATE_INTERVAL
+        ) >= LOTTERY_BALANCE_UPDATE_INTERVAL
+
+    def _check_update_accumulated_prize(self) -> bool:
+        """누적 당첨금을 업데이트할지 확인합니다."""
+        if not self._accumulated_prize_last_updated:
+            return True
+        return (
+            datetime.datetime.now() - self._accumulated_prize_last_updated
+        ) >= LOTTERY_ACCUMULATED_PRIZE_UPDATE_INTERVAL
 
 
 class DhLotto645Coordinator(DhCoordinator):
     """로또 6/45 데이터 업데이트 코디네이터입니다."""
 
-    def __init__(self, hass: HomeAssistant, client: DhLotteryClient):
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: DhLotteryClient,
+        lottery_refresh_func: Callable[[], Awaitable[None]],
+    ):
         super().__init__(
             hass,
             _LOGGER,
@@ -96,18 +122,17 @@ class DhLotto645Coordinator(DhCoordinator):
         )
         self.client = client
         self.lotto_645 = DhLotto645(client)
+        self.lottery_refresh_func = lottery_refresh_func
         self._latest_winning_numbers: Optional[DhLotto645.WinningData] = None
         self._buy_history_last_updated: Optional[datetime.datetime] = None
         self.winning_dict: dict[int, DhLotto645.WinningData] = {}
-        self._accumulated_prize: Optional[DhLotto645.accumulatedPrizeData] = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Lotto 6/45 데이터를 비동기로 업데이트합니다."""
         try:
             latest_winning_numbers: Optional[DhLotto645.WinningData] = None
-            accumulated_prize: Optional[DhLotto645.accumulatedPrizeData] = None
 
-            if await self._async_check_update_winning_numbers():
+            if self._check_update_winning_numbers():
                 async with async_timeout.timeout(10):
                     _LOGGER.info("당첨 번호를 업데이트합니다.")
                     latest_round_no = await self.lotto_645.async_get_latest_round_no()
@@ -115,6 +140,9 @@ class DhLotto645Coordinator(DhCoordinator):
                         latest_round_no
                     )
                     self._latest_winning_numbers = latest_winning_numbers
+                    # 최신 회차를 업데이트 할 때, 구매 내역, 예치금, 누적 당첨금이 같이 업데이트 되도록 함
+                    if self._buy_history_last_updated:
+                        await self.lottery_refresh_func()
                     self._buy_history_last_updated = None
 
             buy_history_this_week: List[DhLotto645BuyData] = []
@@ -126,17 +154,9 @@ class DhLotto645Coordinator(DhCoordinator):
                     )
                     self._buy_history_last_updated = datetime.datetime.now()
 
-            async with async_timeout.timeout(10):
-                _LOGGER.info("누적당첨금을 업ㄷ에이트 합니다.")
-                accumulated_prize = await self.client.async_get_accumulated_prize()
-                self._accumulated_prize = DhLotto645.accumulatedPrizeData(
-                    accumulated_prize=accumulated_prize
-                )
-
             return {
                 "latest_winning_numbers": latest_winning_numbers,
                 "buy_history_this_week": buy_history_this_week,
-                "accumulated_prize": self._accumulated_prize,
             }
         # except DhLotteryLoginError as err:
         # Raising ConfigEntryAuthFailed will cancel future updates
@@ -152,7 +172,7 @@ class DhLotto645Coordinator(DhCoordinator):
         self.winning_dict = {}
         await self.async_request_refresh()
 
-    async def _async_check_update_winning_numbers(self) -> bool:
+    def _check_update_winning_numbers(self) -> bool:
         """당첨 번호를 업데이트할지 확인합니다."""
         if not self._latest_winning_numbers:
             return True

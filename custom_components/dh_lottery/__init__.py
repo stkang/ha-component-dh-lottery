@@ -4,9 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import Optional, List
 
-import voluptuous as vol
-
 import homeassistant.helpers.config_validation as cv
+import voluptuous as vol
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
@@ -18,6 +17,7 @@ from homeassistant.core import (
 )
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
+
 from .client.dh_lottery_client import DhLotteryClient, DhLotteryError
 from .client.dh_lotto_645 import DhLotto645SelMode, DhLotto645
 from .const import (
@@ -67,7 +67,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: DhLotteryConfigEntry) ->
 
     data = DhLotteryData(DhLotteryCoordinator(hass, client))
     if entry.data[CONF_LOTTO_645]:
-        data.lotto_645_coord = DhLotto645Coordinator(hass, client)
+        data.lotto_645_coord = DhLotto645Coordinator(
+            hass, client, data.lottery_coord.async_clear_refresh
+        )
     entry.runtime_data = data
     hass.data[DOMAIN][entry.entry_id] = data
 

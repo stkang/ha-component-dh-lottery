@@ -80,12 +80,6 @@ class DhLotto645:
         draw_date: str
 
     @dataclass
-    class accumulatedPrizeData:
-        """로또 당첨 정보를 나타내는 데이터 클래스입니다."""
-
-        accumulated_prize: int = 10000  # 총예치금
-
-    @dataclass
     class Slot:
         """로또 슬롯 정보를 나타내는 데이터 클래스입니다."""
 

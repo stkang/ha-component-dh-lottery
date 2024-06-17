@@ -35,14 +35,13 @@ async def async_setup_entry(
     """설정 항목을 사용하여 센서 엔티티를 추가합니다."""
     data: DhLotteryData = entry.runtime_data
 
+    await data.lottery_coord.async_config_entry_first_refresh()
     entities: List[Entity] = [
         DhDepositSensor(data.lottery_coord),
+        DhAccumulatedPrizeSensor(data.lottery_coord),
     ]
-    await data.lottery_coord.async_config_entry_first_refresh()
     if entry.data[CONF_LOTTO_645]:
         await data.lotto_645_coord.async_config_entry_first_refresh()
-
-        entities.append(DhLotto645AccumulatedPrizeSensor(data.lotto_645_coord))
 
         entities.append(DhLotto645WinningSensor(data.lotto_645_coord))
         for i in range(1, 6):
@@ -206,25 +205,21 @@ class DhDepositSensor(DhSensor, SensorEntity):
         self.async_write_ha_state()
 
 
-class DhLotto645AccumulatedPrizeSensor(DhSensor, SensorEntity):
+class DhAccumulatedPrizeSensor(DhSensor, SensorEntity):
     """
     동행복권 누적 당첨금 센서 클래스입니다.
     이 클래스는 동행복권의 누적 당첨금을 표시하는 센서를 나타냅니다.
     """
 
-    _attr_name = "당첨금"
+    _attr_name = "누적 당첨금액"
     _attr_icon = "mdi:cash"
     _attr_native_unit_of_measurement = "원"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
 
-    def __init__(self, coordinator: DhLotto645Coordinator):
-        _LOGGER.debug("DhLotto645AccumulatedPrizeSensor")
+    def __init__(self, coordinator: DhLotteryCoordinator):
         super().__init__(coordinator, "accumulated_prize")
-        self._attr_name = "누적 당첨금액"
-        self._attr_device_info = get_dh_lotto_645_device_info(
-            coordinator.client.username
-        )
+        self._attr_device_info = get_dh_lottery_device_info(coordinator.client.username)
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -237,7 +232,7 @@ class DhLotto645AccumulatedPrizeSensor(DhSensor, SensorEntity):
         if (result := self.coordinator.data["accumulated_prize"]) is None:
             return
 
-        if self._attr_native_value == result.accumulated_prize:
+        if self._attr_native_value == result:
             return
-        self._attr_native_value = result.accumulated_prize
+        self._attr_native_value = result
         self.async_write_ha_state()

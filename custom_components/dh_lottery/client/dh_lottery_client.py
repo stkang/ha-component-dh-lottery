@@ -31,6 +31,8 @@ class DhLotteryLoginError(DhLotteryError):
 
 
 class DhLotteryClient:
+    """동행복권 클라이언트 클래스입니다."""
+
     def __init__(self, username: str, password: str):
         """DhLotteryClient 클래스를 초기화합니다."""
         self.username = username
@@ -170,19 +172,19 @@ class DhLotteryClient:
             ) from ex
 
     async def async_get_accumulated_prize(self) -> int:
-        """지급기한이 종료되지 않은 당첨금 누적금액을 조회합니다."""
+        """지급기한이 종료되지 않은 당첨금 누적금액을 조회합니다. 기간 1년"""
+
         end_date = datetime.datetime.now()
-        start_date = end_date - datetime.timedelta(days=400)
-        nowPage: int = 1
-        last_round_no: int = 0
-        is_last_round = False
+        start_date = end_date - datetime.timedelta(days=365)
+        await self.async_get_with_login("myPage.do?method=lottoBuyListView")
+        now_page: int = 1
         accum_prize: int = 0
         try:
             while True:
                 resp = await self.session.post(
                     f"{DH_LOTTERY_URL}/myPage.do?method=lottoBuyList",
                     data={
-                        "nowPage": nowPage,
+                        "nowPage": str(now_page),
                         "searchStartDate": start_date.strftime("%Y%m%d"),
                         "searchEndDate": end_date.strftime("%Y%m%d"),
                         "lottoId": "",
@@ -193,32 +195,18 @@ class DhLotteryClient:
                     },
                 )
                 soup = BeautifulSoup(await resp.text(), "html5lib")
-
                 if soup.find("td", {"class": "nodata"}):
-                    return 0
+                    return accum_prize
 
-                lists = soup.select("table.tbl_data_col tbody tr")
-
-                if len(lists) == 0:
-                    break
-
-                for row in lists:
-                    cells = row.find_all("td")
-                    if (
-                        last_round_no <= int(cells[2].text.strip()) and nowPage > 1
-                    ) or cells[5].text.strip() not in ("당첨", "낙첨", "미추첨"):
-                        is_last_round = True
-                        break
-
-                    accum_prize += DhLotteryClient.parse_digit(cells[6].text.strip())
-
-                if is_last_round:
-                    break
-
-                nowPage += 1
-
-            return accum_prize
-
+                trs = soup.select("table.tbl_data_col tbody tr")
+                for tr in trs:
+                    tds = tr.select("td")
+                    if tds[5].text.strip() not in ("당첨", "낙첨", "미추첨"):
+                        return accum_prize
+                    accum_prize += DhLotteryClient.parse_digit(tds[6].text.strip())
+                if len(trs) < 10:
+                    return accum_prize
+                now_page += 1
         except Exception as ex:
             raise DhLotteryError(
                 "❗지급기한이 종료되지 않은 당첨금을 조회하지 못하였습니다.."
