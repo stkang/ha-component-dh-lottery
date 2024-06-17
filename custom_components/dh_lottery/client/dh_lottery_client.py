@@ -179,6 +179,7 @@ class DhLotteryClient:
         await self.async_get_with_login("myPage.do?method=lottoBuyListView")
         now_page: int = 1
         accum_prize: int = 0
+        last_round_no: int = 0
         try:
             while True:
                 resp = await self.session.post(
@@ -203,6 +204,11 @@ class DhLotteryClient:
                     tds = tr.select("td")
                     if tds[5].text.strip() not in ("당첨", "낙첨", "미추첨"):
                         return accum_prize
+
+                    if last_round_no <= int(tds[2].text.strip()) and now_page > 1:
+                        return accum_prize
+
+                    last_round_no = int(tds[2].text.strip())
                     accum_prize += DhLotteryClient.parse_digit(tds[6].text.strip())
                 if len(trs) < 10:
                     return accum_prize
