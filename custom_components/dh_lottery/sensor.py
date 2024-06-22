@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
 from . import DhLotteryConfigEntry, DhLotteryData
 from .const import (
     CONF_LOTTO_645,
@@ -109,22 +110,25 @@ class DhLotto645HistorySensor(DhSensor, Entity):
         if len(buy_history_this_week) < self._no:
             return
         result = buy_history_this_week[self._no - 1]
-        if self.result == result:
-            return
-        self.result = result
-        self._attr_state = " ".join(map(str, self.result.game.numbers))
-        self._attr_name = (
-            f"{self.result.round_no}회 {self.result.game.slot}({self.result.game.mode})"
-        )
-        self._attr_state = " ".join(map(str, self.result.game.numbers))
-        self._attr_extra_state_attributes = {
-            "추첨 회차": self.result.round_no,
-            "바코드": self.result.barcode,
-            "슬롯": self.result.game.slot,
-            "선택": str(self.result.game.mode),
-            "순위": self.result.rank,
-        }
-        self.async_write_ha_state()
+        try:
+            if self.result == result:
+                return
+            self.result = result
+            self._attr_state = " ".join(map(str, self.result.game.numbers))
+            self._attr_name = f"{self.result.round_no}회 {self.result.game.slot}({self.result.game.mode})"
+            self._attr_state = " ".join(map(str, self.result.game.numbers))
+            self._attr_extra_state_attributes = {
+                "추첨 회차": self.result.round_no,
+                "바코드": self.result.barcode,
+                "슬롯": self.result.game.slot,
+                "선택": str(self.result.game.mode),
+                "순위": self.result.rank,
+            }
+        finally:
+            self._attr_extra_state_attributes["업데이트"] = self.coordinator.data[
+                "update_dt"
+            ]
+            self.async_write_ha_state()
 
 
 class DhLotto645WinningSensor(DhSensor, Entity):
@@ -152,18 +156,24 @@ class DhLotto645WinningSensor(DhSensor, Entity):
         """
         if (result := self.coordinator.data["latest_winning_numbers"]) is None:
             return
-        state = f'{" ".join(map(str, result.numbers))} + {result.bonus_num}'
-        if self._attr_state == state:
-            return
 
-        self._attr_name = f"{result.round_no}회 당첨번호"
-        self._attr_state = state
-        self._attr_extra_state_attributes = {
-            "추첨 회차": result.round_no,
-            "추첨일": result.draw_date,
-            "보너스 번호": result.bonus_num,
-        }
-        self.async_write_ha_state()
+        try:
+            state = f'{" ".join(map(str, result.numbers))} + {result.bonus_num}'
+            if self._attr_state == state:
+                return
+
+            self._attr_name = f"{result.round_no}회 당첨번호"
+            self._attr_state = state
+            self._attr_extra_state_attributes = {
+                "추첨 회차": result.round_no,
+                "추첨일": result.draw_date,
+                "보너스 번호": result.bonus_num,
+            }
+        finally:
+            self._attr_extra_state_attributes["업데이트"] = self.coordinator.data[
+                "update_dt"
+            ]
+            self.async_write_ha_state()
 
 
 class DhDepositSensor(DhSensor, SensorEntity):
@@ -192,17 +202,22 @@ class DhDepositSensor(DhSensor, SensorEntity):
         """
         if (balance := self.coordinator.data["balance"]) is None:
             return
-        if self._attr_native_value == balance.deposit:
-            return
-        self._attr_native_value = balance.deposit
-        self._attr_extra_state_attributes = {
-            "구매 가능 금액": balance.purchase_available,
-            "예약 구매 금액": balance.reservation_purchase,
-            "출금 신청 중금액": balance.withdrawal_request,
-            "구매 불가 금액": balance.purchase_impossible,
-            "이번달 누적 구매 금액": balance.this_month_accumulated_purchase,
-        }
-        self.async_write_ha_state()
+        try:
+            if self._attr_native_value == balance.deposit:
+                return
+            self._attr_native_value = balance.deposit
+            self._attr_extra_state_attributes = {
+                "구매 가능 금액": balance.purchase_available,
+                "예약 구매 금액": balance.reservation_purchase,
+                "출금 신청 중금액": balance.withdrawal_request,
+                "구매 불가 금액": balance.purchase_impossible,
+                "이번달 누적 구매 금액": balance.this_month_accumulated_purchase,
+            }
+        finally:
+            self._attr_extra_state_attributes["업데이트"] = self.coordinator.data[
+                "update_dt"
+            ]
+            self.async_write_ha_state()
 
 
 class DhAccumulatedPrizeSensor(DhSensor, SensorEntity):
@@ -232,7 +247,12 @@ class DhAccumulatedPrizeSensor(DhSensor, SensorEntity):
         if (result := self.coordinator.data["accumulated_prize"]) is None:
             return
 
-        if self._attr_native_value == result:
-            return
-        self._attr_native_value = result
-        self.async_write_ha_state()
+        try:
+            if self._attr_native_value == result:
+                return
+            self._attr_native_value = result
+        finally:
+            self._attr_extra_state_attributes = {
+                "업데이트": self.coordinator.data["update_dt"]
+            }
+            self.async_write_ha_state()
