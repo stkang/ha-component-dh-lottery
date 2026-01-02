@@ -69,7 +69,7 @@ class DhLotteryCoordinator(DhCoordinator):
             if self._check_update_accumulated_prize(now):
                 async with async_timeout.timeout(10):
                     _LOGGER.info("누적 당첨금을 업데이트 합니다.")
-                    accumulated_prize = await self.client.async_get_accumulated_prize()
+                    accumulated_prize = await self.client.async_get_accumulated_prize("LO40")
                     self._accumulated_prize_last_updated = now
 
             return {
@@ -249,6 +249,6 @@ class DhLotto645Coordinator(DhCoordinator):
         """당첨 번호를 비동기로 가져옵니다."""
         winning_data = self.winning_dict.get(round_no)
         if not winning_data:
-            winning_data = await self.lotto_645.async_get_winning_numbers(round_no)
+            winning_data = await self.lotto_645.async_get_round_info(round_no)
             self.winning_dict[round_no] = winning_data
         return winning_data

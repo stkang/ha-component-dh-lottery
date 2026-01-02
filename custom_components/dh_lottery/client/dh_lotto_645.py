@@ -1,14 +1,12 @@
 import datetime
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import List, Dict
+from typing import List, Dict, Optional
 
-from bs4 import BeautifulSoup
 
-from .dh_lottery_client import DhLotteryClient, DH_LOTTERY_URL, DhLotteryError
+from .dh_lottery_client import DhLotteryClient, DhLotteryError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -125,37 +123,38 @@ class DhLotto645:
         """DhLotto645 클래스를 초기화합니다."""
         self.client = client
 
-    async def async_get_latest_round_no(self) -> int:
-        """최신 로또 회차 번호를 가져옵니다."""
-        resp = await self.client.session.get(f"{DH_LOTTERY_URL}/common.do?method=main")
-        soup = BeautifulSoup(await resp.text(), "html5lib")
-        drw_no = soup.find("strong", {"id": "lottoDrwNo"})
-        if not drw_no:
-            raise DhLotto645Error("최신 회차 정보를 가져올 수 없습니다.")
-        return int(drw_no.text)
+    async def async_get_round_info(self, round_no: Optional[int] = None) -> WinningData:
+        """특정 회차의 로또 회차 정보를 가져옵니다."""
+        params = {
+            "_": int(datetime.datetime.now().timestamp() * 1000),
+        }
+        if round_no:
+            params["srchLtEpsd"] = round_no
+        data = await self.client.async_get('lt645/selectPstLt645Info.do', params)
+        items = data.get('list', [])
 
-    async def async_get_winning_numbers(self, round_no: int) -> WinningData:
-        """특정 회차의 로또 당첨 번호를 가져옵니다."""
-        resp = await self.client.session.get(
-            f"{DH_LOTTERY_URL}/common.do?method=getLottoNumber&drwNo={round_no}"
-        )
-        res_json = await resp.json(content_type="text/html")
-        if res_json.get("returnValue") != "success":
-            raise DhLotto645Error(f"당첨번호 조회에 실패했습니다. (회차: {round_no})")
+        if not items or len(items) == 0:
+            raise DhLotto645Error(f"회차 정보 조회에 실패했습니다. (회차: {round_no})")
+        item = items[0]
 
         return DhLotto645.WinningData(
-            round_no=res_json.get("drwNo"),
+            round_no=item.get('ltEpsd'),
             numbers=[
-                res_json.get("drwtNo1"),
-                res_json.get("drwtNo2"),
-                res_json.get("drwtNo3"),
-                res_json.get("drwtNo4"),
-                res_json.get("drwtNo5"),
-                res_json.get("drwtNo6"),
+                item.get("tm1WnNo"),
+                item.get("tm2WnNo"),
+                item.get("tm3WnNo"),
+                item.get("tm4WnNo"),
+                item.get("tm5WnNo"),
+                item.get("tm6WnNo"),
             ],
-            bonus_num=res_json.get("bnusNo"),
-            draw_date=res_json.get("drwNoDate"),
+            bonus_num=item.get("bnsWnNo"),
+            draw_date=item.get("ltRflYmd"),
         )
+
+    async def async_get_latest_round_no(self) -> int:
+        """최신 로또 회차 번호를 가져옵니다."""
+        latest_round = await self.async_get_round_info()
+        return latest_round.round_no
 
     async def async_buy(self, items: List[Slot]) -> BuyData:
         """
@@ -205,12 +204,12 @@ class DhLotto645:
 
             async def _async_check_weekly_limit() -> int:
                 """주간 구매 제한을 확인합니다."""
-                _history_items = await self.async_get_buy_history_this_week()
+                _history_items = await self.client.async_get_buy_list('LO40')
                 __this_week_buy_count = sum(
                     [
-                        len(_item.games)
+                        _item.get("prchsQty", 0)
                         for _item in _history_items
-                        if _item.result == "미추첨"
+                        if _item.get("ltWnResult") == "미추첨"
                     ]
                 )
                 if __this_week_buy_count >= 5:
@@ -290,14 +289,18 @@ class DhLotto645:
             deduplicate_numbers(items)
             buy_count = await _verify_and_get_buy_count(items)
             buy_items = items[:buy_count]
+            live_round = str(await self.async_get_latest_round_no() + 1)
+            direct = (await get_user_ready_socket())
+            param = make_param(buy_items)
             resp = await self.client.session.post(
                 url="https://ol.dhlottery.co.kr/olotto/game/execBuy.do",
                 data={
-                    "round": str(await self.async_get_latest_round_no() + 1),
-                    "direct": (await get_user_ready_socket()),
+                    "round": live_round,
+                    "direct": direct,
                     "nBuyAmount": str(1000 * len(buy_items)),
-                    "param": make_param(buy_items),
+                    "param": param,
                     "gameCnt": len(buy_items),
+                    "saleMdaDcd": "10",
                 },
                 timeout=10,
             )
@@ -316,47 +319,38 @@ class DhLotto645:
 
     async def async_get_buy_history_this_week(self) -> list[BuyHistoryData]:
         """최근 1주일간의 구매 내역을 조회합니다."""
-        pattern = r"detailPop\('(\d+)', '(\d+)'"
 
         async def async_get_receipt(
             _order_no: str, _barcode: str
         ) -> List[DhLotto645.Game]:
             """영수증을 가져옵니다."""
-            _resp = await self.client.session.get(
-                f"{DH_LOTTERY_URL}/myPage.do?method=lotto645Detail&orderNo={_order_no}&barcode={_barcode}&issueNo=1"
+            _resp = await self.client.async_get_with_login('mypage/lotto645TicketDetail.do',
+                params={"ntslOrdrNo": _order_no, "barcd": _barcode, "_": int(datetime.datetime.now().timestamp() * 1000)},
             )
-            _soup = BeautifulSoup(await _resp.text(), "html5lib")
+            ticket = _resp.get("ticket")
+            game_dtl = ticket.get("game_dtl") if ticket else []
             _slots: List[DhLotto645.Game] = []
-            for li in _soup.select("div.selected ul li"):
-                title = li.select("strong span")
-                nums = li.select("div.nums span span")
+            for game in game_dtl:
                 _slots.append(
                     DhLotto645.Game(
-                        slot=title[0].text.strip(),
-                        mode=DhLotto645SelMode.value_of_text(title[1].text.strip()),
-                        numbers=[int(num.text.strip()) for num in nums],
+                        slot=game.get("idx"),
+                        mode=DhLotto645SelMode.value_of(str(game.get("type", 3))),
+                        numbers=game.get("num", []),
                     )
                 )
             return _slots
 
         try:
-            trs = await self.client.async_get_buy_list("LO40")
+            results = await self.client.async_get_buy_list("LO40")
             items: List[DhLotto645.BuyHistoryData] = []
-            for tr in trs:
-                receipt_link = tr.select("td")[3].select("a")
-                if not receipt_link:
-                    continue
-                href = receipt_link[0]["href"]
-                matches = re.search(pattern, href)
-                if not matches:
-                    continue
-                order_no = matches.group(1)
-                barcode = matches.group(2)
+            for result in results:
+                order_no = result.get("ntslOrdrNo")
+                barcode = result.get("gmInfo")
                 items.append(
                     DhLotto645.BuyHistoryData(
-                        round_no=int(tr.select("td")[2].text.strip()),
-                        barcode=tr.select("td")[3].text.strip(),
-                        result=tr.select("td")[5].text.strip(),
+                        round_no=result.get("ltEpsd"),
+                        barcode=barcode,
+                        result=result.get("ltWnResult"),
                         games=await async_get_receipt(order_no, barcode),
                     )
                 )
