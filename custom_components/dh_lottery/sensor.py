@@ -36,14 +36,12 @@ async def async_setup_entry(
     """설정 항목을 사용하여 센서 엔티티를 추가합니다."""
     data: DhLotteryData = entry.runtime_data
 
-    await data.lottery_coord.async_config_entry_first_refresh()
+    # __init__.py에서 이미 async_config_entry_first_refresh() 호출됨
     entities: List[Entity] = [
         DhDepositSensor(data.lottery_coord),
         DhAccumulatedPrizeSensor(data.lottery_coord),
     ]
     if entry.data[CONF_LOTTO_645]:
-        await data.lotto_645_coord.async_config_entry_first_refresh()
-
         entities.append(DhLotto645WinningSensor(data.lotto_645_coord))
         for i in range(1, 6):
             entities.append(DhLotto645HistorySensor(data.lotto_645_coord, i))

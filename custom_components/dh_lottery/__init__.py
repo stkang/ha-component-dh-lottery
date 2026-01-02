@@ -66,10 +66,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: DhLotteryConfigEntry) ->
         raise ConfigEntryNotReady(f"동행 복권 로그인 실패: {ex}") from ex
 
     data = DhLotteryData(DhLotteryCoordinator(hass, client))
+
+    # 센서 플랫폼 설정 전에 coordinator 첫 새로고침 수행
+    try:
+        await data.lottery_coord.async_config_entry_first_refresh()
+    except Exception as ex:
+        raise ConfigEntryNotReady(f"예치금 정보 조회 실패: {ex}") from ex
+
     if entry.data[CONF_LOTTO_645]:
         data.lotto_645_coord = DhLotto645Coordinator(
             hass, client, data.lottery_coord.async_clear_refresh
         )
+        try:
+            await data.lotto_645_coord.async_config_entry_first_refresh()
+        except Exception as ex:
+            raise ConfigEntryNotReady(f"로또 정보 조회 실패: {ex}") from ex
+
     entry.runtime_data = data
     hass.data[DOMAIN][entry.entry_id] = data
 
