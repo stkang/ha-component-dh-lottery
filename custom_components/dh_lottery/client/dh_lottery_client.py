@@ -6,7 +6,7 @@ from typing import Any
 
 import aiohttp
 
-from client.dh_rsa import RSAKey
+from .dh_rsa import RSAKey
 
 _LOGGER = logging.getLogger(__name__)
 
