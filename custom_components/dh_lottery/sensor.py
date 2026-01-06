@@ -105,10 +105,10 @@ class DhLotto645HistorySensor(DhSensor, Entity):
         구입 내역 정보를 업데이트합니다.
         """
         buy_history_this_week = self.coordinator.data["buy_history_this_week"]
-        if len(buy_history_this_week) < self._no:
-            return
-        result = buy_history_this_week[self._no - 1]
         try:
+            if len(buy_history_this_week) < self._no:
+                return
+            result = buy_history_this_week[self._no - 1]
             if self.result == result:
                 return
             self.result = result
