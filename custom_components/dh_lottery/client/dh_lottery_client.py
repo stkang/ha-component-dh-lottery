@@ -10,7 +10,7 @@ from .dh_rsa import RSAKey
 
 _LOGGER = logging.getLogger(__name__)
 
-DH_LOTTERY_URL = "https://dhlottery.co.kr"
+DH_LOTTERY_URL = "https://www.dhlottery.co.kr"
 
 @dataclass
 class DhLotteryBalanceData:
@@ -53,7 +53,7 @@ class DhLotteryClient:
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,"
                 "*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-                "Referer": DH_LOTTERY_URL,
+                "Referer": f"{DH_LOTTERY_URL}/login",
                 "Sec-Fetch-Site": "same-site",
                 "Sec-Fetch-Mode": "navigate",
                 "Sec-Fetch-User": "?1",
@@ -112,9 +112,10 @@ class DhLotteryClient:
 
     async def async_login(self):
         """로그인을 수행합니다."""
-        _LOGGER.info("login")
+        _LOGGER.info("로그인 시작")
         try:
             await self._async_set_select_rsa_module()
+            # 로그인 POST 요청
             resp = await self.session.post(
                 url=f"{DH_LOTTERY_URL}/login/securityLoginCheck.do",
                 data={
@@ -135,6 +136,7 @@ class DhLotteryClient:
             raise DhLotteryError("❗로그인을 수행하지 못했습니다.") from ex
 
     async def _async_set_select_rsa_module(self) -> None:
+        """RSA 공개키를 설정합니다."""
         resp = await self.session.get(
             url=f"{DH_LOTTERY_URL}/login/selectRsaModulus.do",
         )
