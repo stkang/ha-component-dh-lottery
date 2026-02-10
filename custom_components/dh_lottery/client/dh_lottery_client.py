@@ -68,13 +68,19 @@ class DhLotteryClient:
 
     @staticmethod
     async def handle_response_json(response) -> dict[str, Any]:
-        result = await response.json()
-        if response.status != 200 or response.reason != 'OK':
-            raise DhAPIError('❗ API 요청에 실패했습니다.')
+        """JSON 응답을 처리하고, 실패 시 재로그인을 유도합니다."""
+        # [수정] JSON 파싱 시도. 실패하면 HTML(로그인 페이지)로 간주하여 DhAPIError 발생 -> 재로그인 트리거
+        try:
+            result = await response.json(content_type=None)
+        except Exception:
+            # JSON이 아니면 세션 만료로 인한 HTML 응답일 가능성이 높음
+            raise DhAPIError('❗ 응답이 JSON 형식이 아닙니다. (재로그인 필요)')
 
-        if 'data' not in result:
-            raise DhLotteryError('❗ API 응답 데이터가 올바르지 않습니다.')
-        return result.get('data', {})
+        if response.status != 200:
+            raise DhAPIError('❗ API 요청에 실패했습니다.')
+        
+        # data 키가 있으면 그 내부를, 없으면 전체를 반환
+        return result.get('data', result)
 
     async def async_get(self, path: str, params: dict) -> dict:
         """로그인이 필요하지 않은 페이지를 가져옵니다."""
@@ -100,6 +106,7 @@ class DhLotteryClient:
                 return await self.async_get(path, params)
             except DhAPIError:
                 if retry > 0:
+                    _LOGGER.info("세션 만료 감지됨. 재로그인을 시도합니다.")
                     await self.async_login()
                     return await self.async_get_with_login(path, params, retry - 1)
                 raise DhLotteryLoginError("❗로그인 또는 API 요청에 실패했습니다.")
@@ -124,11 +131,11 @@ class DhLotteryClient:
                     "inpUserId": self.username,
                 },
             )
-            if resp.status != 200 or resp.reason != 'OK' or 'loginSuccess.do' not in str(resp.request_info.url):
+            # 로그인 성공 여부 체크
+            if resp.status != 200: 
                 self.logged_in = False
-                raise DhLotteryLoginError(
-                    "로그인에 실패했습니다. 아이디 또는 비밀번호를 확인해주세요. (5회 실패했을 수도 있습니다. 이 경우엔 홈페이지에서 비밀번호를 변경해야 합니다)"
-                )
+                raise DhLotteryLoginError("로그인 요청 실패")
+            
             self.logged_in = True
         except DhLotteryError:
             raise
@@ -148,42 +155,49 @@ class DhLotteryClient:
 
     async def async_get_balance(self) -> DhLotteryBalanceData:
         """예치금 현황을 조회합니다."""
+        # 1. 예치금 조회
         try:
             current_time = int(datetime.datetime.now().timestamp() * 1000)
-            user_result = await self.async_get_with_login("mypage/selectUserMndp.do", params={"_": current_time},)
+            user_result = await self.async_get_with_login("mypage/selectUserMndp.do", params={"_": current_time})
+            
+            if isinstance(user_result, dict):
+                 user_mndp = user_result.get("userMndp", user_result)
+            else:
+                 user_mndp = {}
 
-            user_mndp = user_result.get("userMndp", {})
-            pnt_dpst_amt = user_mndp.get("pntDpstAmt", 0)
-            pnt_tkmny_amt = user_mndp.get("pntTkmnyAmt", 0)
-            ncsbl_dpst_Amt = user_mndp.get("ncsblDpstAmt", 0)
-            ncsbl_tkmny_amt = user_mndp.get("ncsblTkmnyAmt", 0)
-            csbl_dpst_amt = user_mndp.get("csblDpstAmt", 0)
-            csbl_tkmny_amt = user_mndp.get("csblTkmnyAmt", 0)
-            total_amt = (pnt_dpst_amt - pnt_tkmny_amt) + (ncsbl_dpst_Amt - ncsbl_tkmny_amt) + (csbl_dpst_amt - csbl_tkmny_amt)
-
-            crnt_entrs_amt = user_mndp.get("crntEntrsAmt", 0)
-            rsvt_ordr_amt = user_mndp.get("rsvtOrdrAmt", 0)
-            daw_aply_amt = user_mndp.get("dawAplyAmt", 0)
-            fee_amt = user_mndp.get("feeAmt", 0)
-
+            total_amt = int(user_mndp.get("totalAmt", 0))
+            crnt_entrs_amt = int(user_mndp.get("crntEntrsAmt", 0))
+            rsvt_ordr_amt = int(user_mndp.get("rsvtOrdrAmt", 0))
+            daw_aply_amt = int(user_mndp.get("dawAplyAmt", 0))
+            fee_amt = int(user_mndp.get("feeAmt", 0))
+            
             purchase_impossible = rsvt_ordr_amt + daw_aply_amt + fee_amt
+            
+        except Exception as ex:
+            _LOGGER.error(f"예치금 데이터 파싱 실패: {ex}")
+            raise DhLotteryError("❗예치금 정보를 찾을 수 없습니다.") from ex
 
+        # 2. 이번 달 누적 구매 금액 조회
+        wly_prchs_acml_amt = 0
+        try:
             home_result = await self.async_get_with_login(
                 "mypage/selectMyHomeInfo.do",
                 params={"_": current_time},
             )
-            prchs_lmt_info = home_result.get("prchsLmtInfo", {})
-            wly_prchs_acml_amt = prchs_lmt_info.get("wlyPrchsAcmlAmt", 0)
-            return DhLotteryBalanceData(
-                deposit = total_amt,
-                purchase_available=crnt_entrs_amt,
-                reservation_purchase=rsvt_ordr_amt,
-                withdrawal_request=daw_aply_amt,
-                purchase_impossible=purchase_impossible,
-                this_month_accumulated_purchase=wly_prchs_acml_amt,
-            )
+            if isinstance(home_result, dict):
+                prchs_lmt_info = home_result.get("prchsLmtInfo", {})
+                wly_prchs_acml_amt = int(prchs_lmt_info.get("wlyPrchsAcmlAmt", 0))
         except Exception as ex:
-            raise DhLotteryError("❗예치금 현황을 조회하지 못했습니다.") from ex
+            _LOGGER.warning(f"누적 구매 금액 조회 실패(무시됨): {ex}")
+
+        return DhLotteryBalanceData(
+            deposit=total_amt,
+            purchase_available=crnt_entrs_amt,
+            reservation_purchase=rsvt_ordr_amt,
+            withdrawal_request=daw_aply_amt,
+            purchase_impossible=purchase_impossible,
+            this_month_accumulated_purchase=wly_prchs_acml_amt,
+        )
 
     async def async_get_buy_list(self, lotto_id: str) -> list[dict[str, Any]]:
         """1주일간의 구매내역을 조회합니다."""
@@ -201,11 +215,13 @@ class DhLotteryClient:
                     "_": int(datetime.datetime.now().timestamp() * 1000)
                 },
             )
-            return result.get("list", [])
+            if isinstance(result, dict):
+                items = result.get("list", result.get("data", {}).get("list", []))
+                return items
+            return []
         except Exception as ex:
-            raise DhLotteryError(
-                "❗최근 1주일간의 구매내역을 조회하지 못했습니다."
-            ) from ex
+            _LOGGER.warning(f"구매 내역 조회 실패: {ex}")
+            return []
 
     async def async_get_accumulated_prize(self, lotto_id: str) -> int:
         """지급기한이 종료되지 않은 당첨금 누적금액을 조회합니다. 기간 1년"""
@@ -224,14 +240,20 @@ class DhLotteryClient:
                     "_": int(datetime.datetime.now().timestamp() * 1000),
                 },
             )
-            items = result.get("list", [])
+            
+            if isinstance(result, dict):
+                 items = result.get("list", result.get("data", {}).get("list", []))
+            else:
+                 items = []
 
             accum_prize: int = 0
             for item in items:
-                accum_prize += item.get("ltWnAmt", 0)
+                prize = item.get("ltWnAmt")
+                if prize:
+                    accum_prize += int(prize)
+                    
             return accum_prize
 
         except Exception as ex:
-            raise DhLotteryError(
-                "❗지급기한이 종료되지 않은 당첨금을 조회하지 못하였습니다.."
-            ) from ex
+            _LOGGER.error(f"누적 당첨금 조회 실패: {ex}")
+            return 0
