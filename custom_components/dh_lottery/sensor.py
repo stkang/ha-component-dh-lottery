@@ -85,6 +85,7 @@ class DhLotto645HistorySensor(DhSensor, Entity):
             coordinator.client.username
         )
         self.result: Optional[DhLotto645BuyData] = None
+        self._attr_extra_state_attributes = {} # v0.1.8 추가 
 
     @property
     def icon(self):
