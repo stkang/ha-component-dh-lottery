@@ -57,6 +57,11 @@ class DhLotteryCoordinator(DhCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """동행복권 데이터를 비동기로 업데이트합니다."""
         now = datetime.datetime.now()
+
+        # 새벽 0시 ~ 6시 (판매 중지 시간) 접속 차단 로직
+        if 0 <= now.hour < 6 and self.data is not None:
+            return self.data
+        
         try:
             balance: Optional[DhLotteryBalanceData] = None
             if self._check_update_balance(now):
@@ -130,6 +135,11 @@ class DhLotto645Coordinator(DhCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Lotto 6/45 데이터를 비동기로 업데이트합니다."""
         now = datetime.datetime.now()
+
+        # 새벽 0시 ~ 6시 (판매 중지 시간) 접속 차단 로직
+        if 0 <= now.hour < 6 and self.data is not None:
+            return self.data
+        
         try:
             latest_winning_numbers: Optional[DhLotto645.WinningData] = None
 
